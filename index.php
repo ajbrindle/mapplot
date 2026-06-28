@@ -29,7 +29,7 @@ if (isset($_GET['get_tracks'])) {
             if (!$xml) continue; 
 
             $coordinates = array();
-            $maxEle = -99999; // Start with a very low number
+            $maxEle = -99999;
             $highestPoint = null;
             
             if (isset($xml->trk)) {
@@ -42,7 +42,6 @@ if (isset($_GET['get_tracks'])) {
                                     $lon = (float)$trkpt['lon'];
                                     $coordinates[] = array($lon, $lat);
 
-                                    // Check for elevation data
                                     if (isset($trkpt->ele)) {
                                         $ele = (float)$trkpt->ele;
                                         if ($ele > $maxEle) {
@@ -63,7 +62,6 @@ if (isset($_GET['get_tracks'])) {
                     'coordinates' => $coordinates
                 );
 
-                // Only attach elevation data if we actually found <ele> tags
                 if ($highestPoint !== null) {
                     $trackData['highestPoint'] = $highestPoint;
                     $trackData['maxElevation'] = $maxEle;
@@ -97,14 +95,64 @@ if (is_dir($baseDir)) {
     <title>GPX Route Viewer</title>
     <script src="https://api.mapbox.com/mapbox-gl-js/v2.15.0/mapbox-gl.js"></script>
     <link href="https://api.mapbox.com/mapbox-gl-js/v2.15.0/mapbox-gl.css" rel="stylesheet" />
+    <link rel="manifest" href="manifest.json?v=1">
     <style>
-        body { margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; display: flex; flex-direction: column; height: 100vh; }
-        header { background: #2c3e50; color: #fff; padding: 12px 20px; z-index: 10; box-shadow: 0 2px 5px rgba(0,0,0,0.2); display: flex; align-items: center; gap: 15px; }
-        header h1 { margin: 0; font-size: 1.2rem; }
-        select { padding: 8px 12px; font-size: 1rem; border-radius: 4px; border: 1px solid #ccc; background: #fff; max-width: 250px; width: 100%; }
+        body { 
+            margin: 0; 
+            padding: 0; 
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; 
+            display: flex; 
+            flex-direction: column; 
+            height: 100vh; 
+        }
+        
+        header { 
+            background: #2c3e50; 
+            color: #fff; 
+            padding: 12px 20px; 
+            z-index: 10; 
+            box-shadow: 0 2px 5px rgba(0,0,0,0.2); 
+            display: flex; 
+            align-items: center; 
+            justify-content: flex-start; /* Explicitly left-justifies everything */
+            gap: 20px; /* Spacing between the three elements */
+            flex-wrap: wrap; 
+        }
+        
+        header h1 { 
+            margin: 0; 
+            font-size: 1.2rem; 
+            white-space: nowrap; 
+        }
+        
+        select { 
+            padding: 8px 12px; 
+            font-size: 1rem; 
+            border-radius: 4px; 
+            border: 1px solid #ccc; 
+            background: #fff; 
+            max-width: 250px; 
+            width: 100%; 
+        }
+        
+        .toggle-container {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 0.95rem;
+            cursor: pointer;
+            user-select: none;
+            white-space: nowrap;
+        }
+        
+        .toggle-container input {
+            cursor: pointer;
+            width: 16px;
+            height: 16px;
+        }
+
         #map { flex: 1; width: 100%; }
         
-        /* Custom Elevation Marker Styling */
         .elevation-marker {
             background-color: #2c3e50;
             color: #fff;
@@ -112,15 +160,19 @@ if (is_dir($baseDir)) {
             border-radius: 6px;
             font-size: 0.85rem;
             font-weight: 600;
-            border: 2px solid white; /* Overridden by JS to match track color */
+            border: 2px solid white;
             box-shadow: 0 2px 6px rgba(0,0,0,0.4);
             white-space: nowrap;
-            pointer-events: none; /* Let clicks pass through to the map */
+            pointer-events: none;
         }
 
         @media (max-width: 600px) {
-            header { flex-direction: column; align-items: stretch; gap: 10px; padding: 10px; }
-            header h1 { font-size: 1rem; }
+            header { 
+                flex-direction: column; 
+                align-items: flex-start; 
+                gap: 12px; 
+                padding: 15px; 
+            }
         }
     </style>
 </head>
@@ -134,6 +186,10 @@ if (is_dir($baseDir)) {
             <option value="<?php echo htmlspecialchars($folder); ?>"><?php echo htmlspecialchars($folder); ?></option>
         <?php endforeach; ?>
     </select>
+    
+    <label class="toggle-container">
+        <input type="checkbox" id="toggleElevation"> Show Peak Elevations
+    </label>
 </header>
 
 <div id="map"></div>
@@ -155,7 +211,9 @@ if (is_dir($baseDir)) {
 
     let activeLayerIds = [];
     let activeSourceIds = [];
-    let activeMarkers = []; // Array to track and clear elevation markers
+    let activeMarkers = []; 
+
+    const elevationToggle = document.getElementById('toggleElevation');
 
     function getRandomColor(index, total) {
         const hue = (index * (360 / Math.max(total, 1))) % 360;
@@ -165,12 +223,19 @@ if (is_dir($baseDir)) {
     function clearMap() {
         activeLayerIds.forEach(id => { if (map.getLayer(id)) map.removeLayer(id); });
         activeSourceIds.forEach(id => { if (map.getSource(id)) map.removeSource(id); });
-        activeMarkers.forEach(marker => marker.remove()); // Remove all HTML markers
+        activeMarkers.forEach(marker => marker.remove()); 
         
         activeLayerIds = [];
         activeSourceIds = [];
         activeMarkers = [];
     }
+
+    elevationToggle.addEventListener('change', function() {
+        const displayState = this.checked ? 'block' : 'none';
+        activeMarkers.forEach(marker => {
+            marker.getElement().style.display = displayState;
+        });
+    });
 
     document.getElementById('folderSelect').addEventListener('change', function() {
         const folder = this.value;
@@ -193,7 +258,6 @@ if (is_dir($baseDir)) {
                     const layerId = `layer-${index}`;
                     const color = getRandomColor(index, tracks.length);
 
-                    // 1. Draw the Line
                     map.addSource(sourceId, {
                         'type': 'geojson',
                         'data': {
@@ -214,20 +278,20 @@ if (is_dir($baseDir)) {
                     activeSourceIds.push(sourceId);
                     activeLayerIds.push(layerId);
 
-                    // 2. Extend map bounds
                     track.coordinates.forEach(coord => { bounds.extend(coord); });
 
-                    // 3. Create Elevation Marker if data exists
                     if (track.highestPoint && track.maxElevation !== undefined) {
                         const el = document.createElement('div');
                         el.className = 'elevation-marker';
-                        el.style.borderColor = color; // Match marker border to track color
+                        el.style.borderColor = color;
                         el.innerHTML = `▲ ${Math.round(track.maxElevation)}m`;
+                        
+                        el.style.display = elevationToggle.checked ? 'block' : 'none';
 
                         const marker = new mapboxgl.Marker({
                             element: el,
-                            anchor: 'bottom', // Positions the bottom of the div exactly at the coordinate
-                            offset: [0, -5]   // Lift it slightly above the line
+                            anchor: 'bottom',
+                            offset: [0, -5]
                         })
                         .setLngLat(track.highestPoint)
                         .addTo(map);
