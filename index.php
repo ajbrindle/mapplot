@@ -95,7 +95,7 @@ if (is_dir($baseDir)) {
     <title>GPX Route Viewer</title>
     <script src="https://api.mapbox.com/mapbox-gl-js/v2.15.0/mapbox-gl.js"></script>
     <link href="https://api.mapbox.com/mapbox-gl-js/v2.15.0/mapbox-gl.css" rel="stylesheet" />
-    <link rel="manifest" href="manifest.json?v=1">
+    <link rel="manifest" href="manifest.json?v=2">
     <style>
         body { 
             margin: 0; 
