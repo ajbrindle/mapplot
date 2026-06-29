@@ -95,7 +95,6 @@ if (is_dir($baseDir)) {
     <title>GPX Route Viewer</title>
     <script src="https://api.mapbox.com/mapbox-gl-js/v2.15.0/mapbox-gl.js"></script>
     <link href="https://api.mapbox.com/mapbox-gl-js/v2.15.0/mapbox-gl.css" rel="stylesheet" />
-    <link rel="manifest" href="manifest.json?v=2">
     <style>
         body { 
             margin: 0; 
@@ -114,8 +113,8 @@ if (is_dir($baseDir)) {
             box-shadow: 0 2px 5px rgba(0,0,0,0.2); 
             display: flex; 
             align-items: center; 
-            justify-content: flex-start; /* Explicitly left-justifies everything */
-            gap: 20px; /* Spacing between the three elements */
+            justify-content: flex-start; 
+            gap: 20px; 
             flex-wrap: wrap; 
         }
         
@@ -151,7 +150,14 @@ if (is_dir($baseDir)) {
             height: 16px;
         }
 
-        #map { flex: 1; width: 100%; }
+        /* Map container needs to be relative so the absolute loading overlay sits inside it */
+        .map-container {
+            flex: 1;
+            position: relative;
+            width: 100%;
+        }
+
+        #map { width: 100%; height: 100%; }
         
         .elevation-marker {
             background-color: #2c3e50;
@@ -164,6 +170,35 @@ if (is_dir($baseDir)) {
             box-shadow: 0 2px 6px rgba(0,0,0,0.4);
             white-space: nowrap;
             pointer-events: none;
+        }
+
+        /* Loading Overlay Styles */
+        #loadingOverlay {
+            display: none; /* Hidden by default */
+            position: absolute;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(255, 255, 255, 0.7);
+            z-index: 1000;
+            justify-content: center;
+            align-items: center;
+            flex-direction: column;
+            color: #2c3e50;
+            font-weight: bold;
+        }
+
+        .spinner {
+            border: 4px solid #ccc;
+            border-top: 4px solid #2c3e50;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin-bottom: 10px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
         }
 
         @media (max-width: 600px) {
@@ -192,7 +227,14 @@ if (is_dir($baseDir)) {
     </label>
 </header>
 
-<div id="map"></div>
+<div class="map-container">
+    <div id="map"></div>
+    
+    <div id="loadingOverlay">
+        <div class="spinner"></div>
+        <div>Parsing GPX Files...</div>
+    </div>
+</div>
 
 <script>
     const mapboxToken = '<?php echo addslashes(MAPBOX_TOKEN); ?>';
@@ -214,6 +256,7 @@ if (is_dir($baseDir)) {
     let activeMarkers = []; 
 
     const elevationToggle = document.getElementById('toggleElevation');
+    const loadingOverlay = document.getElementById('loadingOverlay');
 
     function getRandomColor(index, total) {
         const hue = (index * (360 / Math.max(total, 1))) % 360;
@@ -243,11 +286,15 @@ if (is_dir($baseDir)) {
 
         if (!folder) return;
 
+        // Show the loading spinner immediately
+        loadingOverlay.style.display = 'flex';
+
         fetch(`index.php?get_tracks=1&folder=${encodeURIComponent(folder)}`)
             .then(response => response.json())
             .then(tracks => {
                 if (tracks.error || tracks.length === 0) {
                     alert(tracks.error || 'No valid GPX files found in this folder.');
+                    loadingOverlay.style.display = 'none'; // Hide if there's an error
                     return;
                 }
 
@@ -301,8 +348,14 @@ if (is_dir($baseDir)) {
                 });
 
                 map.fitBounds(bounds, { padding: 60, maxZoom: 14 });
+                
+                // Hide the spinner once rendering is complete
+                loadingOverlay.style.display = 'none';
             })
-            .catch(err => console.error('Error fetching track data:', err));
+            .catch(err => {
+                console.error('Error fetching track data:', err);
+                loadingOverlay.style.display = 'none'; // Hide if the fetch fails completely
+            });
     });
 </script>
 
